@@ -7,7 +7,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import streamlit as st
 
 # データフレームの読み込み
-df = pd.read_excel('/Users/takasugatomohiro/Downloads/作成dataframe/2023-09_kitei_dataframe.xlsx')
+df = pd.read_excel('2023-09_kitei_dataframe.xls')
 
 # テキストデータの前処理
 df["本文"] = df["本文"].str.normalize("NFKC")
