@@ -37,10 +37,10 @@ if keywords_input:
     else:
         condition = any
 
-    # 本文と括弧書きの両方に対してキーワード検索を行う関数を定義
+    # 本文と条文名の両方に対してキーワード検索を行う関数を定義
     def keyword_search(row):
         return condition(keyword in row['本文'] for keyword in keywords_list) or \
-               condition(keyword in row['括弧書き'] for keyword in keywords_list)
+               condition(keyword in row['条文名'] for keyword in keywords_list)
 
     # データフレームから条件に合致する行をフィルタリング
     filtered_df = df[df.apply(keyword_search, axis=1)]
@@ -62,18 +62,18 @@ if keywords_input:
     for index, row in filtered_df.iterrows():
         with st.expander(f'結果 {index + 1}', expanded=True):  # `expanded=True` でエクスパンダを自動的に開く
             st.write(f"**規程名:** {row['規程名']}")
-            st.write(f"**括弧書き:** {row['括弧書き']}")
+            st.write(f"**条文名:** {row['条文名']}")
             st.write(f"**条番号:** {row['条番号']}")
             st.write(f"**本文:**")
 
-            # 本文と括弧書きの両方でキーワードを赤字にして全文を表示
+            # 本文と条文名の両方でキーワードを赤字にして全文を表示
             for keyword in keywords_list:
                 highlighted_text = row['本文'].replace(keyword, f"<span style='color:red;'>{keyword}</span>")
                 highlighted_text = highlighted_text.replace(keyword, f"<span style='color:red;'>{keyword}</span>")
                 
 
-                # 括弧書き内のキーワードも赤字にする
-                highlighted_text_brackets = row['括弧書き'].replace(keyword, f"<span style='color:red;'>{keyword}</span>")
+                # 条文名のキーワードも赤字にする
+                highlighted_text_brackets = row['条文名'].replace(keyword, f"<span style='color:red;'>{keyword}</span>")
                 st.markdown(highlighted_text, unsafe_allow_html=True)
                 st.markdown(highlighted_text_brackets, unsafe_allow_html=True)
 
