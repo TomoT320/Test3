@@ -1,113 +1,85 @@
 import pandas as pd
-import unicodedata
-import MeCab
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics.pairwise import cosine_similarity
 import streamlit as st
 
 # データフレームの読み込み
-df = pd.read_excel('2023-09_kitei_dataframe.xls')
+df = pd.read_excel('/Users/takasugatomohiro/Downloads/作成dataframe/2023-09_kitei_dataframe.xlsx')
 
-# テキストデータの前処理
-df["本文"] = df["本文"].str.normalize("NFKC")
+# DataFrame全体から改行文字を削除
+df = df.applymap(lambda x: x.replace('\n', '') if isinstance(x, str) else x)
+# DataFrame内の全てのセルに対して半角スペースと全角スペースを削除する関数を適用
+df = df.applymap(lambda x: x.replace(' ', '').replace('　', '') if isinstance(x, str) else x)
 
-unify_dic = {
-    '『': '「',
-    '』': '」',
-    '【': '「',
-    '】': '」'
-}
 
-def unify_str(sentence):
-    dic_for_unify = str.maketrans(unify_dic)
-    sentence = sentence.translate(dic_for_unify)
-    return sentence
+# Streamlitアプリケーションの設定
+st.title('Text Searching App')
 
-df["本文"] = df["本文"].apply(unify_str)
+# サイドバーに保険種名の選択を追加
+selected_insurance_types = st.sidebar.multiselect('保険種名の選択', df['保険種名'].unique())
 
-# MeCabのインスタンスを作成
-mecab = MeCab.Tagger()
-mecab.parse("")  # バグ回避
+# サイドバーにキーワードの入力フィールドを追加
+keywords_input_container = st.sidebar.empty()
+keywords_input = keywords_input_container.text_input('キーワードを入力してください（複数の場合はカンマで区切ってください）')
 
-def get_surfaces(text):
-    result = []
-    node = mecab.parseToNode(text)
-    while node:
-        if node.feature.startswith("名詞") or node.feature.startswith("動詞"):
-            result.append(node.surface)
-        node = node.next
-    return " ".join(result)
+# クリアボタンを押したかどうかを判定する変数
+clear_button_pressed = st.sidebar.button('クリア')
 
-df['text_tokenized'] = df['本文'].apply(get_surfaces)
+# サイドバーにAND/OR検索のラジオボタンを追加
+search_option = st.sidebar.radio('検索オプション', ['AND', 'OR'])
 
-def split_str(text):
-    return text.split(' ')
+# キーワードが入力された場合に検索を実行
+if keywords_input:
+    # 複数のキーワードをリストに分割
+    keywords_list = [keyword.strip() for keyword in keywords_input.split(',')]
 
-df['tokenized_split'] = df.text_tokenized.apply(split_str)
+    # AND検索またはOR検索の条件を設定
+    if search_option == 'AND':
+        condition = all
+    else:
+        condition = any
 
-def remove_stop_words(sentence):
-    stop_words = ["する", "し","こと", "とき", "れ", "(", ")", ".", "%", "さ", "い", "もの", "す", "なら", "係る", "いう", "なら",
-                  "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "、",
-                  "(", ")",  "等", "前年", "いた", "つき", "なっ"] # 適当な文字を設定
-    for s in stop_words:
-        sentence = sentence.replace(s, '')
-    return sentence
+    # 本文と括弧書きの両方に対してキーワード検索を行う関数を定義
+    def keyword_search(row):
+        return condition(keyword in row['本文'] for keyword in keywords_list) or \
+               condition(keyword in row['括弧書き'] for keyword in keywords_list)
 
-df["text_tokenized1"] = df["text_tokenized"].apply(remove_stop_words)
+    # データフレームから条件に合致する行をフィルタリング
+    filtered_df = df[df.apply(keyword_search, axis=1)]
 
-def n_gram(target, n):
-    n_gram_list = [target[idx:idx + n] for idx in range(len(target) - n + 1)]
-    return ' '.join([''.join(wordlist) for wordlist in n_gram_list])
+    # 保険種名の選択がある場合、それに合致する行をさらにフィルタリング
+    if selected_insurance_types:
+        filtered_df = filtered_df[filtered_df['保険種名'].isin(selected_insurance_types)]
 
-df['tokenized_split'] = df.text_tokenized1.apply(split_str)
-df['tokenized_2gram'] = df['tokenized_split'].apply(n_gram, n=2)
+    # 各規程名ごとのヒット件数をカウント
+    regulation_counts = filtered_df['規程名'].value_counts().reset_index()
+    regulation_counts.columns = ['規程名', 'ヒット件数']
 
-# テキストデータをTF-IDFベクトルに変換
-tfidf_vectorizer = TfidfVectorizer()
-tfidf_matrix = tfidf_vectorizer.fit_transform(df['text_tokenized1'].fillna(''))
+    # フィルタリングされたデータを表示
+    st.write('検索結果:')
+    st.write(f"検索結果総数: {len(filtered_df)} 件")
+    st.write('各規程名ごとのヒット件数:')
+    st.write(regulation_counts)
 
-# TF-IDFベクトルを標準化
-ss = StandardScaler(with_mean=False)  # with_meanをFalseに設定
-tfidf_matrix_normalized = ss.fit_transform(tfidf_matrix)
+    for index, row in filtered_df.iterrows():
+        with st.expander(f'結果 {index + 1}', expanded=True):  # `expanded=True` でエクスパンダを自動的に開く
+            st.write(f"**規程名:** {row['規程名']}")
+            st.write(f"**括弧書き:** {row['括弧書き']}")
+            st.write(f"**条番号:** {row['条番号']}")
+            st.write(f"**本文:**")
 
-# コサイン類似度行列を計算
-cos_similarity_matrix = cosine_similarity(tfidf_matrix_normalized)
+            # 本文と括弧書きの両方でキーワードを赤字にして全文を表示
+            for keyword in keywords_list:
+                highlighted_text = row['本文'].replace(keyword, f"<span style='color:red;'>{keyword}</span>")
+                highlighted_text = highlighted_text.replace(keyword, f"<span style='color:red;'>{keyword}</span>")
+                
 
-# Streamlitアプリケーションの開始
-st.title("キーワード検索アプリ")
+                # 括弧書き内のキーワードも赤字にする
+                highlighted_text_brackets = row['括弧書き'].replace(keyword, f"<span style='color:red;'>{keyword}</span>")
+                st.markdown(highlighted_text, unsafe_allow_html=True)
+                st.markdown(highlighted_text_brackets, unsafe_allow_html=True)
 
-# キーワード入力フィールド
-keyword = st.text_input("キーワードを入力してください:")
 
-# キーワードが入力された場合
-if keyword:
-    # キーワードを前処理
-    keyword = unicodedata.normalize("NFKC", keyword)
-    keyword = unify_str(keyword)
-    keyword = get_surfaces(keyword)
-    keyword = remove_stop_words(keyword)
-
-    # 新しいキーワードのTF-IDFベクトルを計算
-    new_keyword_tfidf = tfidf_vectorizer.transform([keyword])
-    new_keyword_tfidf_normalized = ss.transform(new_keyword_tfidf)
-
-    # コサイン類似度を計算
-    cos_similarity_new_keyword = cosine_similarity(new_keyword_tfidf_normalized, tfidf_matrix_normalized)
-
-    # 類似度を含むデータフレームを作成
-    df['類似度'] = cos_similarity_new_keyword[0]
-
-    # 類似度でソート
-    df = df.sort_values(by='類似度', ascending=False)
-
-    # 結果を表示
-    st.subheader("類似度の高い条文:")
-    for i, row in df.head(10).iterrows():
-        st.write(f"Similarity: {row['類似度']:.4f}")
-        st.write(f"保険種名: {row['保険種名']}")
-        st.write(f"規程名: {row['規程名']}")
-        st.write(f"括弧書き: {row['括弧書き']}")
-        st.write(f"条番号: {row['条番号']}")
-        st.write(f"本文: {row['本文']}")
-        st.write("---")
+# クリアボタンがクリックされた場合、一時的に新しいテキスト入力ウィジェットを表示してキーワード入力をクリア
+if clear_button_pressed:
+    keywords_input_container.empty()
+    new_keywords_input = st.sidebar.text_input('キーワードを入力してください（複数の場合はカンマで区切ってください）')
+    keywords_input_container.text_input('', value=new_keywords_input)
