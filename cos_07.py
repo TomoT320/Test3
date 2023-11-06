@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 
 # データフレームの読み込み
-df = pd.read_excel('/Users/takasugatomohiro/Downloads/作成dataframe/2023-09_kitei_dataframe.xlsx')
+df = pd.read_excel('2023-09_kitei_dataframe.xls')
 
 # DataFrame全体から改行文字を削除
 df = df.applymap(lambda x: x.replace('\n', '') if isinstance(x, str) else x)
