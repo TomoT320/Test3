@@ -1,4 +1,2 @@
-MeCab
-TfidfVectorizer
-StandardScaler
-cosine_similarity
+openpyxl
+xlrd
